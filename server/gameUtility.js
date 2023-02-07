@@ -1,13 +1,16 @@
-const { GAME_STATUS } = require('./constants');
+const { GAME_STATUS, TOTAL_MOVES } = require('./constants');
 
 const getUpdatedBoard = ({ game, move }) => {
-  const { board } = game;
+  const { board, totalMoves } = game;
   const { row, col, sign } = move;
   board[row][col] = sign;
-  return board;
+  return {
+    updatedBoard: board,
+    totalMoves: totalMoves + 1,
+  };
 };
 
-const getGameStatus = ({ updatedBoard, move }) => {
+const getGameStatus = ({ updatedBoard, move, totalMoves }) => {
   let h = 0, v = 0, d1 = 0, d2 = 0;
   const { row, col } = move;
   const board_size = updatedBoard.length;
@@ -21,6 +24,9 @@ const getGameStatus = ({ updatedBoard, move }) => {
 
   if (h === board_size || v === board_size || d1 === board_size || d2 === board_size) {
     return GAME_STATUS.OVER;
+  }
+  if (totalMoves === TOTAL_MOVES) {
+    return GAME_STATUS.DRAW;
   }
   return GAME_STATUS.IN_PROGRESS;
 };

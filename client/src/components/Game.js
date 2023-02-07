@@ -1,26 +1,22 @@
 import React, { useEffect, useState } from "react";
 import Board from "./Board";
-import { GAME_STATUS, ACTION_TYPES } from '../constants';
+import { ACTION_TYPES, SIDE_MAP, ROLES, GAME_STATUS } from '../constants';
 
 const Game = (props) => {
+  const { game, userId, role } = props;
   const [isTurn, setIsTurn] = useState(props.userId === props.game.nextTurn);
-  // const [board, updateBoard] = useState(props.game.board);
-  
   const userSide = props.game.players[props.userId];
 
   useEffect(() => {
-    setIsTurn(props.userId === props.game.nextTurn);
-  }, [props.userId, props.game.nextTurn]);
+    const { userId, game } = props;
+    setIsTurn(userId === game.nextTurn);
+  }, [props]);
 
   const handleClick = (row, col) => {
     const { board } = props.game;
-    console.log(board, row, col)
     if (board[row][col] !== -1 || board[row][col] === !userSide) {
       return;
     }
-    // const updatedBoard = [...board];
-    // updatedBoard[row][col] = userSide;
-    // updateBoard(updatedBoard);
     props.sendMessage({
       action: ACTION_TYPES.NEW_MOVE,
       data: {
@@ -31,11 +27,20 @@ const Game = (props) => {
     });
   };
 
+  const showTurnMsg = game && game.gameStatus && game.gameStatus === GAME_STATUS.IN_PROGRESS && role === ROLES.PLAYER;
+
   return (
     <>
-      <h1>Tic Tac Toe</h1>
-      <Board squares={props.game.board} userSide={userSide} isDisabled={!isTurn} handleClick={handleClick} />
-      {/* <h3>{winner ? "Winner: " + winner : "Next Player: " + xO}</h3> */}
+      <h3>You are&nbsp;
+        {role === ROLES.SPECTATOR ? 'Spectating' : (
+          <span className={`${SIDE_MAP[userSide]}`}>{SIDE_MAP[userSide]}</span>
+        )}
+      </h3>
+      {showTurnMsg ? (
+        <h3>{userId === game.nextTurn ? "It's your turn" : "Wait for your turn"}</h3>)
+        : ''
+      }
+      <Board squares={game.board} userSide={userSide} isDisabled={!isTurn} handleClick={handleClick} />
     </>
   );
 };

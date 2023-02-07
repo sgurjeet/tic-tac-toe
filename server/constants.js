@@ -7,7 +7,9 @@ module.exports = {
     YET_TO_START: -1,
     IN_PROGRESS: 1,
     OVER: 2,
+    DRAW: 3,
   },
+  TOTAL_MOVES: 9,
   ROLES: {
     PLAYER: 'player',
     SPECTATOR: 'spectator',

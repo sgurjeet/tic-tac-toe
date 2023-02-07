@@ -9,7 +9,6 @@ const App = () => {
   const [name, setName] = useState('');
   const [id, setId] = useState('');
   const [role, setRole] = useState('');
-  const [winner, setWinner] = useState(null);
   const [users, setUsers] = useState({
     players: 0,
     spectators: 0,
@@ -49,10 +48,26 @@ const App = () => {
     const chatHistory = [...chat];
     chatHistory.push({
       message,
-      userName: userName === name ? 'You': userName,
+      userName: userName,
       timestamp: (new Date()).toLocaleString(),
     });
     updateChatHistory(chatHistory);
+  };
+
+  const showWinnerMessage = (winner) => {
+    if (game.gameStatus === GAME_STATUS.OVER) {
+      if (role === ROLES.SPECTATOR) {
+        alert(`Game over! ${winner.name} won.`);
+      }
+      else if (winner.userId === id) {
+        alert('Awesome! You won.');
+      } else {
+        alert('Oops! You lost.');
+      }
+    }
+    if (game.gameStatus === GAME_STATUS.DRAW) {
+      alert("It's a draw!");
+    }
   };
 
   const messageHandler = (message) => {
@@ -69,18 +84,16 @@ const App = () => {
         }
         setId(userId);
         setGameData(game);
-        setUsers(users);
+        if (users) {
+          setUsers(users);
+        }
+        if (winner) {
+          showWinnerMessage(winner);
+        }
         break;
       case MESSAGE_TYPES.GAME_START:
         setGameData(game);
-        break;
-      case MESSAGE_TYPES.GAME_OVER:
-        setGameData({
-          ...game,
-          gameStatus: GAME_STATUS.OVER,
-        });
-        setWinner(winner.userId);
-        break;
+        break;  
       case MESSAGE_TYPES.NEW_CHAT_MESSAGE:
         updateChat(message);
         break;
@@ -98,57 +111,68 @@ const App = () => {
 
   return (
     <div>
+      <h1 className="heading">Tic Tac Toe</h1>
       {game.gameStatus !== GAME_STATUS.IN_PROGRESS || !role ? (
-        <div>
-          <input
-            type='text'
-            placeholder='Enter your name'
-            required={true}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <h2>Choose role:</h2>
-          <button
-            value={ROLES.PLAYER}
-            disabled={!name.trim().length || users.players >= 2}
-            onClick={() => {
-              setRole(role);
-              sendMessage({
-                action: ACTION_TYPES.SELECT_ROLE,
-                data: {
-                  type: ROLES.PLAYER,
-                  name,
-                },
-              });
-            }}
-          >
-            {ROLES.PLAYER.toUpperCase()}
-          </button>
-          <button
-            value={ROLES.SPECTATOR}
-            disabled={!name.trim().length}
-            onClick={() => {
-              setRole(role);
-              sendMessage({
-                action: ACTION_TYPES.SELECT_ROLE,
-                data: {
-                  type: ROLES.SPECTATOR,
-                  name,
-                },
-              });
-            }}
-          >
-            {ROLES.SPECTATOR.toUpperCase()}
-          </button>
+        <div className="row">
+          <div className="col"></div>
+          <div className="col">
+            <input
+              type='text'
+              placeholder='Enter your name...'
+              required={true}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="form-control basic-margin"
+            />
+          </div>
+          <div className="col">
+            <button
+              className="btn btn-primary basic-margin"
+              disabled={!name.trim().length || users.players >= 2}
+              onClick={() => {
+                setRole(ROLES.PLAYER);
+                sendMessage({
+                  action: ACTION_TYPES.SELECT_ROLE,
+                  data: {
+                    type: ROLES.PLAYER,
+                    name,
+                  },
+                });
+              }}
+            >
+              {ROLES.PLAYER.toUpperCase()}
+            </button>
+            <button
+              className="btn btn-secondary basic-margin"
+              disabled={!name.trim().length}
+              onClick={() => {
+                setRole(ROLES.SPECTATOR);
+                sendMessage({
+                  action: ACTION_TYPES.SELECT_ROLE,
+                  data: {
+                    type: ROLES.SPECTATOR,
+                    name,
+                  },
+                });
+              }}
+            >
+              {ROLES.SPECTATOR.toUpperCase()}
+            </button>
+          </div>
+          <div className="col"></div>
         </div>
       ) : (
-        <div>
-          <Game userId={id} game={game} sendMessage={sendMessage} winner={winner} />
-          <Chat sendMessage={sendMessage} updateChatHistory={updateChat} chat={chat} name={name} />
+        <div className="row">
+          <div className="col">
+            <Game userId={id} game={game} sendMessage={sendMessage} role={role}/>
+          </div>
+          <div className="col">
+            <Chat sendMessage={sendMessage} updateChatHistory={updateChat} chat={chat} name={name} />
+          </div>
         </div>
       )}
-      <div>Players: {users.players}</div>
-      <div>Spectators: {users.spectators}</div>
+      {game.gameStatus !== GAME_STATUS.IN_PROGRESS ? <h4>Waiting for players to join...</h4> : ''}
+      <h4><b>Joined - Players:</b> {users.players} | <b>Spectators:</b> {users.spectators}</h4>
     </div>
   );
 };

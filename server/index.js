@@ -32,6 +32,7 @@ const deleteConnection = async (id) => {
     Key: {
       userId: id,
     },
+    ReturnValues: 'ALL_OLD',
   }).promise();
 };
 
@@ -129,12 +130,13 @@ const startNewGame = async (params) => {
       Key: {
         gameId: Date.now(),
       },
-      UpdateExpression: 'set board = :board, gameStatus = :gameStatus, players = :players, nextTurn = :nextTurn',
+      UpdateExpression: 'set board = :board, gameStatus = :gameStatus, players = :players, nextTurn = :nextTurn, totalMoves = :totalMoves',
       ExpressionAttributeValues: {
         ':board': board,
         ':gameStatus': gameStatus,
         ':players': playerIdsMap,
         ':nextTurn': players[0].userId,
+        ':totalMoves': 0,
       },
       ReturnValues: 'ALL_NEW',
     }).promise();
@@ -142,6 +144,17 @@ const startNewGame = async (params) => {
   } catch (error) {
     console.log(error)
   }
+};
+
+const validateRole = async ({ type }) => {
+  const {
+    playersCount,
+  } = await getUsersCount();
+  const isPlayersFull = type === ROLES.PLAYER && playersCount === 2;
+  if (!Object.values(ROLES).includes(type) || isPlayersFull) {
+    return false;
+  }
+  return true;
 };
 
 exports.handler = async (event, context) => {
@@ -161,18 +174,6 @@ exports.handler = async (event, context) => {
         userId: connectionId,
       },
     }).promise();
-    const { Count: numberOfUsers } = await dynamo.scan({
-      TableName: TABLES.USERS,
-    }).promise();
-    await broadcastMessage({
-      gwApi,
-      message: {
-        type: MESSAGE_TYPES.NEW_USER,
-        message: 'New user joined',
-        numberOfUsers, 
-      },
-      currentConnectionId: connectionId,
-    });
     return {
       statusCode: 200,
       body: 'Success',
@@ -184,12 +185,13 @@ exports.handler = async (event, context) => {
   if (routeKey === "$disconnect") {
     let statusCode = 200, body = '';
     try {
-      await deleteConnection(connectionId);
+      const { Attributes: { type } } = await deleteConnection(connectionId);
       const {
         playersCount,
         spectatorsCount,
       } = await getUsersCount();
-      if (!playersCount) {
+      // reset game if any player leaves
+      if (type === ROLES.PLAYER) {
         await clearOldGame();
         game = {};
       }
@@ -248,12 +250,18 @@ exports.handler = async (event, context) => {
   }
   if (routeKey === ACTION_TYPES.SELECT_ROLE) {
     const reqBody = JSON.parse(event.body);
+    const { type, name } = reqBody.data || {};
     let statusCode = 200, body = { message: 'Successfully selected role' };
-    if (!Object.values(ROLES).includes(reqBody.data.type)) {
-      statusCode = 400;
-      body = { message: 'Invalid role selected' };
-    }
     try {
+      const isValid = await validateRole({ type });
+      if (!isValid) {
+        statusCode = 400;
+        body = { message: 'Invalid role selected' };
+        return {
+          statusCode,
+          body,
+        };
+      }
       await dynamo.update({
         TableName: TABLES.USERS,
         Key: {
@@ -261,8 +269,8 @@ exports.handler = async (event, context) => {
         },
         UpdateExpression: 'set #type = :userType, #name = :userName',
         ExpressionAttributeValues: {
-          ':userType': reqBody.data.type,
-          ':userName': reqBody.data.name,
+          ':userType': type,
+          ':userName': name,
         },
         ExpressionAttributeNames: {
           '#type': 'type',
@@ -316,8 +324,18 @@ exports.handler = async (event, context) => {
     const reqBody = JSON.parse(event.body);
     let statusCode = 200, body = 'Successfully made move';
     try {
-      const updatedBoard = getUpdatedBoard({ game, move: reqBody.data });
-      const gameStatus = getGameStatus({ updatedBoard, move: reqBody.data });
+      const {
+        updatedBoard,
+        totalMoves,
+      } = getUpdatedBoard({
+        game,
+        move: reqBody.data,
+      });
+      const gameStatus = getGameStatus({
+        updatedBoard,
+        move: reqBody.data,
+        totalMoves,
+      });
       let nextTurn = '';
       Object.keys(game.players).forEach(id => {
         if (id !== connectionId) {
@@ -329,11 +347,12 @@ exports.handler = async (event, context) => {
         Key: {
           gameId: game.gameId,
         },
-        UpdateExpression: 'set board = :board, gameStatus = :gameStatus, nextTurn = :nextTurn',
+        UpdateExpression: 'set board = :board, gameStatus = :gameStatus, nextTurn = :nextTurn, totalMoves = :totalMoves',
         ExpressionAttributeValues: {
           ':board': updatedBoard,
           ':gameStatus': gameStatus,
           ':nextTurn': nextTurn,
+          ':totalMoves': totalMoves,
         },
         ReturnValues: 'ALL_NEW',
       }).promise();
@@ -346,28 +365,30 @@ exports.handler = async (event, context) => {
           game,
         },
       });
-      const { Items } = await dynamo.scan({
-        TableName: TABLES.USERS,
-        FilterExpression: '#userId = :userId',
-        ExpressionAttributeNames: {
-          '#userId': 'userId',
-        },
-        ExpressionAttributeValues: {
-          ':userId': connectionId,
-        },
-      });
-      const currentUserData = Items[0];
-      if (gameStatus === GAME_STATUS.OVER) {
+      console.log('gameData', gameData)
+      if ([GAME_STATUS.OVER, GAME_STATUS.DRAW].includes(gameStatus)) {
+        const { Items } = await dynamo.scan({
+          TableName: TABLES.USERS,
+          FilterExpression: 'userId = :userId',
+          ExpressionAttributeValues: {
+            ':userId': connectionId,
+          },
+        }).promise();
+        const currentUserData = Items[0];
         await broadcastMessage({
           gwApi,
           message: {
-            type: MESSAGE_TYPES.GAME_OVER,
+            type: MESSAGE_TYPES.GAME_STATUS,
             message: 'Game Over',
             winner: currentUserData,
+            game,
           },
         });
+        await clearOldGame();
+        game = {};
       }
     } catch (err) {
+      console.log(err)
       statusCode = 400;
       body = 'Error in updating move';
     }

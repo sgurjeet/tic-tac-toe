@@ -1,23 +1,23 @@
 import React from "react";
-
-const sideMap = {
-  0: 'O',
-  1: 'X',
-};
+import { SIDE_MAP } from '../constants';
 
 const Board = ({ squares, handleClick, isDisabled, userSide }) => (
-  <div className="board">
+    <div className="board">
     {squares.map((squareCols, row) => (
-      squareCols.map((cell, col) => (
-        <button
-          disabled={isDisabled || (cell !== -1 && cell !== userSide)}
-          key={`${row}${col}`}
-          className={`squares ${sideMap[cell]}`}
-          onClick={() => handleClick(row, col)}
-        >
-          {sideMap[cell]}
-        </button>
-      ))
+      squareCols.map((cell, col) => {
+        const disabled = isDisabled || (cell !== -1 && cell !== userSide);
+        return (
+          <button
+            disabled={disabled}
+            key={`${row}${col}`}
+            className={`squares ${SIDE_MAP[cell]}`}
+            onClick={() => handleClick(row, col)}
+            style={{ cursor: `${disabled ? 'not-allowed' : 'pointer'}` }}
+          >
+            {SIDE_MAP[cell]}
+          </button>
+        )
+      })
     ))}
   </div>
 );
